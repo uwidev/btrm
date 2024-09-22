@@ -4,7 +4,7 @@
 usage() {
 	echo "Usage: $0 -s <snapshot-dir> -f <file-to-remove>"
 	echo "  -s <snapshot-dir>    Path to Snapper snapshots directory"
-	echo "  -f <file-to-remove>  Absolute path of the file to remove from snapshots"
+	echo "  -f <file-to-remove>  Relative path from snapshot-dir to the file"
 	echo "  -h                   Show this message"
 	exit 1
 }
