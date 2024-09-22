@@ -1,0 +1,99 @@
+#!/bin/env bash
+
+# Function to display usage information
+usage() {
+	echo "Usage: $0 -d <snapshot-dir> -f <file-to-remove>"
+	echo "  -s <snapshot-dir>    Path to Snapper snapshots directory"
+	echo "  -f <file-to-remove>  Absolute path of the file to remove from snapshots"
+	exit 1
+}
+
+while getopts ":s:f:" opt; do
+	case $opt in
+	s)
+		SNAPSHOTS_DIR=$OPTARG
+		;;
+	f)
+		FILE_TO_REMOVE=$OPTARG
+		;;
+	\?)
+		echo "Invalid option: -%OPTARG" 1>&2
+		;;
+	:)
+		echo "Option -$OPTARG requires an argument." 1>&2
+		usage
+		;;
+	esac
+done
+
+if [ -z "$SNAPSHOTS_DIR" ] || [ -z "$FILE_TO_REMOVE" ]; then
+	usage
+fi
+
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# Find files
+files=$(find "$SNAPSHOTS_DIR"/*/snapshot/"$(dirname "$FILE_TO_REMOVE")" -maxdepth 1 -name "$(basename "$FILE_TO_REMOVE")")
+
+if [ -z "$files" ]; then
+	echo "No files found in snapshots matching the search."
+	exit 1
+fi
+
+echo -e "${CYAN}The following files were found and will be ${RED}deleted:${NC}"
+echo "$files"
+
+# Confirm deletion (first prompt)
+echo -e "${CYAN}Are you sure? [(y)es/no]"
+read confirm1
+if [ "$confirm1" != "yes" ] && [ "$confirm1" != "y" ] && [ "$confirm1" != "Y" ]; then
+	echo "Aborted."
+	exit 0
+fi
+
+echo -e "${RED}\nFINAL CONFIRMATION! (type CONFIRM)${NC}"
+read confirm2
+if [ "$confirm2" != "CONFIRM" ]; then
+	echo "Aborted."
+	exit 0
+fi
+echo
+
+# args
+#	$1 - file on btrfs subvolume
+do_delete() {
+	if [ -e "$1" ]; then
+
+		echo "removing $1..."
+
+		SUBVOL="${1%"$(dirname "$FILE_TO_REMOVE")"*}"
+		is_readonly=$(sudo btrfs property get -ts "$SUBVOL" ro | awk -F= '{print $NF}')
+		if [ "$is_readonly" == "true" ]; then
+			# echo ">> Snapshot \"$SUBVOL\" is read-only. Temporarily unsetting to delete..."
+			sudo btrfs property set -ts "$SUBVOL" ro false
+		fi
+
+		if [ -f "$1" ]; then
+			sudo rm "$1"
+		elif [ -d "$1" ]; then
+			sudo rm -rf "$1"
+		fi
+
+		if [ "$is_readonly" == "true" ]; then
+			# echo ">> Restoring read-only flag to snapshot $SUBVOL..."
+			sudo btrfs property set -ts "$SUBVOL" ro true
+		fi
+
+	else
+		echo "File or directory not found in snapshot $1, skipping..."
+	fi
+}
+
+# Loop through each snapshot in the Snapper directory
+while IFS= read -r file; do
+	do_delete "$file"
+done <<<"$files"
+
+echo "File removal complete from all snapshots."
