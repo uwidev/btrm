@@ -101,3 +101,4 @@ while IFS= read -r file; do
 done <<<"$files"
 
 echo "File removal complete from all snapshots."
+echo "Remember to rebalance your tree to reclaim your space."
